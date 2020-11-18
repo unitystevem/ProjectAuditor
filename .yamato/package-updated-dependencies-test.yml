@@ -1,0 +1,49 @@
+{% metadata_file .yamato/config.metadata %}
+---
+{% for editor in test_editors %}
+{% for platform in test_platforms %}
+dependency_{{ platform.name }}_{{ editor.version }}:
+  name : Dependency Test {{ editor.version }} on {{ platform.name }}
+  agent:
+    type: {{ platform.type }}
+    image: {{ platform.image }}
+    flavor: {{ platform.flavor}}
+  commands:
+    - npm install upm-ci-utils@stable -g --registry https://artifactory.prd.cds.internal.unity3d.com/artifactory/api/npm/upm-npm
+    - upm-ci package test -u {{ editor.version }} --type updated-dependencies-tests --package-path package
+  artifacts:
+    logs:
+      paths:
+        - "upm-ci~/test-results/**/*"
+  dependencies:
+    - .yamato/package-pack.yml#pack
+{% endfor %}
+{% endfor %}
+
+dependency_test_trigger:
+  name: Dependency Tests Trigger
+  agent:
+    type: Unity::VM
+    image: package-ci/win10:stable
+    flavor: b1.large
+  commands:
+    - npm install upm-ci-utils@stable -g --registry https://artifactory.prd.cds.internal.unity3d.com/artifactory/api/npm/upm-npm
+    - upm-ci package izon -d
+  artifacts:
+    logs:
+      paths:
+        - "upm-ci~/test-results/**/*"
+    packages:
+      paths:
+        - "upm-ci~/packages/**/*"
+  triggers:
+    recurring:
+      - branch: master
+        frequency: 22 * * ?
+  dependencies:
+    - .yamato/package-pack.yml#pack
+    {% for editor in test_editors %}
+    {% for platform in test_platforms %}
+    - .yamato/package-updated-dependencies-test.yml#dependency_{{platform.name}}_{{editor.version}}
+    {% endfor %}
+    {% endfor %}
