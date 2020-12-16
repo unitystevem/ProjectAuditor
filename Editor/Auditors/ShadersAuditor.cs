@@ -61,7 +61,7 @@ namespace Unity.ProjectAuditor.Editor.Auditors
         {
         }
 
-        public void Audit(Action<ProjectIssue> onIssueFound, Action onComplete, IProgressBar progressBar = null)
+        public void Audit(Action<ProjectIssue> onIssueFound, Action onComplete = null, Action<string> onError = null, IProgressBar progressBar = null)
         {
             var shaderPathMap = new Dictionary<Shader, string>();
             var shaderGuids = AssetDatabase.FindAssets("t:shader");

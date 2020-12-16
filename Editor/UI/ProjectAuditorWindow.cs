@@ -466,6 +466,10 @@ namespace Unity.ProjectAuditor.Editor.UI
 
                     m_ShouldRefresh = true;
                 },
+                (message) =>
+                {
+                    EditorUtility.DisplayDialog("Project Auditor", message, "OK");
+                },
                 new ProgressBarDisplay());
         }
 
@@ -495,12 +499,7 @@ namespace Unity.ProjectAuditor.Editor.UI
                 {
                     newIssues.Add(issue);
                     m_ProjectReport.AddIssue(issue);
-                },
-                    () =>
-                    {
-                    },
-                    new ProgressBarDisplay()
-                );
+                });
 
                 if (shadersView != null)
                 {

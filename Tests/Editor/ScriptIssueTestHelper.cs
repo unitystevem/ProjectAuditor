@@ -26,7 +26,7 @@ namespace UnityEditor.ProjectAuditor.EditorTests
                 () =>
                 {
                     completed = true;
-                });
+                } );
 
             Assert.True(completed);
 

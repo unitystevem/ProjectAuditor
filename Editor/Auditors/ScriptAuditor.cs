@@ -42,7 +42,7 @@ namespace Unity.ProjectAuditor.Editor.Auditors
                 AddAnalyzer(Activator.CreateInstance(type) as IInstructionAnalyzer);
         }
 
-        public void Audit(Action<ProjectIssue> onIssueFound, Action onComplete, IProgressBar progressBar = null)
+        public void Audit(Action<ProjectIssue> onIssueFound, Action onComplete, Action<string> onError = null, IProgressBar progressBar = null)
         {
             if (m_ProblemDescriptors == null)
                 throw new Exception("Issue Database not initialized.");
@@ -89,12 +89,14 @@ namespace Unity.ProjectAuditor.Editor.Auditors
             // first phase: analyze assemblies generated from editable scripts
             AnalyzeAssemblies(localAssemblyInfos, assemblyDirectories, onCallFound, onIssueFoundInternal, null, progressBar);
 
+            var anyCompileError =
+                compilationResults.Any(result => result.Status == CompilationStatus.FinishedWithErrors);
             var enableBackgroundAnalysis = m_Config.AnalyzeInBackground;
 #if !UNITY_2019_3_OR_NEWER
             enableBackgroundAnalysis = false;
 #endif
             // second phase: analyze all remaining assemblies, in a separate thread if enableBackgroundAnalysis is enabled
-            if (enableBackgroundAnalysis)
+            if (enableBackgroundAnalysis && !anyCompileError)
             {
                 m_AssemblyAnalysisThread = new Thread(() =>
                     AnalyzeAssemblies(readOnlyAssemblyInfos, assemblyDirectories, onCallFound, onIssueFound, onCompleteInternal));
@@ -109,6 +111,11 @@ namespace Unity.ProjectAuditor.Editor.Auditors
                 Profiler.EndSample();
             }
             Profiler.EndSample();
+
+            if (anyCompileError)
+            {
+                onError("One or more scripts failed to compile. Please see the Console for more details.");
+            }
         }
 
         void AnalyzeAssemblies(IEnumerable<AssemblyInfo> assemblyInfos, List<string> assemblyDirectories, Action<CallInfo> onCallFound, Action<ProjectIssue> onIssueFound, Action<IProgressBar> onComplete, IProgressBar progressBar = null)
