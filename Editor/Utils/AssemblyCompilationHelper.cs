@@ -6,16 +6,31 @@ using UnityEditor;
 using UnityEditor.Compilation;
 #if UNITY_2018_2_OR_NEWER
 using UnityEditor.Build.Player;
+using UnityEngine;
 
 #endif
 
 namespace Unity.ProjectAuditor.Editor.Utils
 {
+    enum CompilationStatus
+    {
+        NotStarted,
+        Started,
+        Finished,
+        FinishedWithErrors
+    }
+
+    class CompilationResult
+    {
+        public AssemblyInfo AssemblyInfo;
+        public CompilationStatus Status;
+        public CompilerMessage[] CompilerMessages;
+    }
+
     class AssemblyCompilationHelper : IDisposable
     {
         string m_OutputFolder = string.Empty;
-        bool m_Success = true;
-
+        Dictionary<string, CompilationResult> m_CompilationResults;
         Action<string> m_OnAssemblyCompilationStarted;
 
         public void Dispose()
@@ -33,7 +48,7 @@ namespace Unity.ProjectAuditor.Editor.Utils
             m_OutputFolder = string.Empty;
         }
 
-        public IEnumerable<AssemblyInfo> Compile(bool editorAssemblies = false, IProgressBar progressBar = null)
+        public CompilationResult[] Compile(bool editorAssemblies = false, IProgressBar progressBar = null)
         {
 #if UNITY_2019_3_OR_NEWER
             var assemblies = CompilationPipeline.GetAssemblies(editorAssemblies ? AssembliesType.Editor : AssembliesType.PlayerWithoutTestAssemblies);
@@ -43,58 +58,72 @@ namespace Unity.ProjectAuditor.Editor.Utils
             var assemblies = CompilationPipeline.GetAssemblies();
 #endif
 
-            IEnumerable<string> compiledAssemblyPaths;
 #if UNITY_2018_2_OR_NEWER
             if (editorAssemblies)
             {
-                compiledAssemblyPaths = CompileEditorAssemblies(assemblies, false);
+                CompileEditorAssemblies(assemblies, false);
             }
             else
             {
-                compiledAssemblyPaths = CompilePlayerAssemblies(assemblies, progressBar);
+                CompilePlayerAssemblies(assemblies, progressBar);
             }
 #else
             // fallback to CompilationPipeline assemblies
-            compiledAssemblyPaths = CompileEditorAssemblies(assemblies, !editorAssemblies);
+            CompileEditorAssemblies(assemblies, !editorAssemblies);
 #endif
 
-            var assemblyInfos = new List<AssemblyInfo>();
-            foreach (var compiledAssemblyPath in compiledAssemblyPaths)
+            if (m_CompilationResults.Any(pair => pair.Value.Status != CompilationStatus.Finished))
             {
-                var assemblyInfo = AssemblyHelper.GetAssemblyInfoFromAssemblyPath(compiledAssemblyPath);
+                Dispose();
+                throw new AssemblyCompilationException();
+            }
+
+            foreach (var pair in m_CompilationResults)
+            {
+                var assemblyInfo = AssemblyHelper.GetAssemblyInfoFromAssemblyPath(pair.Key);
                 var assembly = assemblies.First(a => a.name.Equals(assemblyInfo.name));
                 var sourcePaths = assembly.sourceFiles.Select(file => file.Remove(0, assemblyInfo.relativePath.Length + 1));
 
                 assemblyInfo.sourcePaths = sourcePaths.ToArray();
-                assemblyInfos.Add(assemblyInfo);
+                pair.Value.AssemblyInfo = assemblyInfo;
             }
 
-            return assemblyInfos;
+            return m_CompilationResults.Select(pair => pair.Value).ToArray();
         }
 
-        IEnumerable<string> CompileEditorAssemblies(IEnumerable<Assembly> assemblies, bool excludeEditorOnlyAssemblies)
+        void CompileEditorAssemblies(IEnumerable<Assembly> assemblies, bool excludeEditorOnlyAssemblies)
         {
             if (excludeEditorOnlyAssemblies)
             {
                 assemblies = assemblies.Where(a => a.flags != AssemblyFlags.EditorAssembly);
             }
-            return assemblies.Select(assembly => assembly.outputPath);
+
+            m_CompilationResults = assemblies.ToDictionary(assembly => assembly.outputPath, assembly => new CompilationResult
+            {
+                Status = CompilationStatus.Finished
+            });
         }
 #if UNITY_2018_2_OR_NEWER
-        IEnumerable<string> CompilePlayerAssemblies(Assembly[] assemblies, IProgressBar progressBar = null)
+        void CompilePlayerAssemblies(Assembly[] assemblies, IProgressBar progressBar = null)
         {
             if (progressBar != null)
             {
                 var numAssemblies = assemblies.Length;
                 progressBar.Initialize("Assembly Compilation", "Compiling project scripts",
                     numAssemblies);
-                m_OnAssemblyCompilationStarted = (s) =>
+                m_OnAssemblyCompilationStarted = (outputAssemblyPath) =>
                 {
                     // The compilation pipeline might compile Editor-specific assemblies
                     // let's advance the progress bar only for Player ones.
-                    var assemblyName = Path.GetFileNameWithoutExtension(s);
+                    var filename = Path.GetFileName(outputAssemblyPath);
+                    var assemblyName = Path.GetFileNameWithoutExtension(filename);
                     if (assemblies.FirstOrDefault(asm => asm.name.Equals(assemblyName)) != null)
+                    {
+                        m_CompilationResults[outputAssemblyPath].Status = CompilationStatus.Started;
+
                         progressBar.AdvanceProgressBar(assemblyName);
+                    }
+
                 };
                 CompilationPipeline.assemblyCompilationStarted += m_OnAssemblyCompilationStarted;
             }
@@ -102,24 +131,22 @@ namespace Unity.ProjectAuditor.Editor.Utils
 
             m_OutputFolder = FileUtil.GetUniqueTempPathInProject();
 
+            m_CompilationResults = assemblies.ToDictionary(a => Path.Combine(m_OutputFolder, Path.GetFileName(a.outputPath)).Replace("\\", "/"), a => new CompilationResult
+            {
+                Status = CompilationStatus.NotStarted
+            });
+
+            var buildTarget = EditorUserBuildSettings.activeBuildTarget;
             var input = new ScriptCompilationSettings
             {
-                target = EditorUserBuildSettings.activeBuildTarget,
-                group = EditorUserBuildSettings.selectedBuildTargetGroup
+                target = buildTarget,
+                @group =  BuildPipeline.GetBuildTargetGroup(buildTarget)
             };
 
-            var compilationResult = PlayerBuildInterface.CompilePlayerScripts(input, m_OutputFolder);
+            /*var result = */PlayerBuildInterface.CompilePlayerScripts(input, m_OutputFolder);
 
             if (progressBar != null)
                 progressBar.ClearProgressBar();
-
-            if (!m_Success)
-            {
-                Dispose();
-                throw new AssemblyCompilationException();
-            }
-
-            return compilationResult.assemblies.Select(assembly => Path.Combine(m_OutputFolder, assembly));
         }
 #endif
         public IEnumerable<string> GetCompiledAssemblyDirectories()
@@ -137,7 +164,9 @@ namespace Unity.ProjectAuditor.Editor.Utils
 
         void OnAssemblyCompilationFinished(string outputAssemblyPath, CompilerMessage[] messages)
         {
-            m_Success = m_Success && messages.Count(message => message.type == CompilerMessageType.Error) == 0;
+            var compilationResult = m_CompilationResults[outputAssemblyPath];
+            compilationResult.CompilerMessages = messages;
+            compilationResult.Status = messages.Any(m => m.type == CompilerMessageType.Error) ? CompilationStatus.FinishedWithErrors : CompilationStatus.Finished;
         }
     }
 }
