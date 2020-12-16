@@ -72,12 +72,6 @@ namespace Unity.ProjectAuditor.Editor.Utils
             CompileEditorAssemblies(assemblies, !editorAssemblies);
 #endif
 
-            if (m_CompilationResults.Any(pair => pair.Value.Status != CompilationStatus.Finished))
-            {
-                Dispose();
-                throw new AssemblyCompilationException();
-            }
-
             foreach (var pair in m_CompilationResults)
             {
                 var assemblyInfo = AssemblyHelper.GetAssemblyInfoFromAssemblyPath(pair.Key);

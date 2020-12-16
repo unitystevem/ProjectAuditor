@@ -439,42 +439,34 @@ namespace Unity.ProjectAuditor.Editor.UI
 
             var newIssues = new List<ProjectIssue>();
 
-            try
+            m_ProjectAuditor.Audit(projectIssue =>
             {
-                m_ProjectAuditor.Audit(projectIssue =>
+                newIssues.Add(projectIssue);
+                m_ProjectReport.AddIssue(projectIssue);
+            },
+                completed =>
                 {
-                    newIssues.Add(projectIssue);
-                    m_ProjectReport.AddIssue(projectIssue);
-                },
-                    completed =>
+                    // add batch of issues
+                    foreach (var view in m_AnalysisViews)
                     {
-                        // add batch of issues
-                        foreach (var view in m_AnalysisViews)
-                        {
-                            view.AddIssues(newIssues);
-                        }
+                        view.AddIssues(newIssues);
+                    }
 
-                        if (m_ShaderVariantsWindow != null)
-                        {
-                            m_ShaderVariantsWindow.AddIssues(newIssues);
-                        }
+                    if (m_ShaderVariantsWindow != null)
+                    {
+                        m_ShaderVariantsWindow.AddIssues(newIssues);
+                    }
 
-                        newIssues.Clear();
+                    newIssues.Clear();
 
-                        if (completed)
-                        {
-                            m_AnalysisState = AnalysisState.Completed;
-                        }
+                    if (completed)
+                    {
+                        m_AnalysisState = AnalysisState.Completed;
+                    }
 
-                        m_ShouldRefresh = true;
-                    },
-                    new ProgressBarDisplay());
-            }
-            catch (AssemblyCompilationException e)
-            {
-                m_AnalysisState = AnalysisState.NotStarted;
-                Debug.LogError(e);
-            }
+                    m_ShouldRefresh = true;
+                },
+                new ProgressBarDisplay());
         }
 
         void AnalyzeShaderVariants()
