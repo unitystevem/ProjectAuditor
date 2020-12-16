@@ -41,10 +41,10 @@ namespace UnityEditor.ProjectAuditor.EditorTests
         {
             using (var compilationHelper = new AssemblyCompilationHelper())
             {
-                var assemblyInfos = compilationHelper.Compile();
+                var compilationResults = compilationHelper.Compile();
 
-                Assert.Positive(assemblyInfos.Count());
-                Assert.NotNull(assemblyInfos.FirstOrDefault(info => info.name.Contains(AssemblyHelper.DefaultAssemblyName)));
+                Assert.Positive(compilationResults.Count());
+                Assert.NotNull(compilationResults.FirstOrDefault(result => result.AssemblyInfo.name.Contains(AssemblyHelper.DefaultAssemblyName)));
             }
         }
 
