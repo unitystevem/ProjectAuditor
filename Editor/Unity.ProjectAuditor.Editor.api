@@ -194,6 +194,7 @@ namespace Unity.ProjectAuditor.Editor.Auditors
     {
         public AssetsAuditor() {}
         public virtual void Audit(System.Action<Unity.ProjectAuditor.Editor.ProjectIssue> onIssueFound, System.Action onComplete, Unity.ProjectAuditor.Editor.IProgressBar progressBar = default(Unity.ProjectAuditor.Editor.IProgressBar));
+        public static Unity.ProjectAuditor.Editor.DependencyNode GetAssetNode(string assetPath);
         public virtual System.Collections.Generic.IEnumerable<Unity.ProjectAuditor.Editor.ProblemDescriptor> GetDescriptors();
         public virtual void Initialize(Unity.ProjectAuditor.Editor.ProjectAuditorConfig config);
         public virtual void RegisterDescriptor(Unity.ProjectAuditor.Editor.ProblemDescriptor descriptor);
