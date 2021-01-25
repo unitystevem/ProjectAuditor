@@ -274,6 +274,9 @@ namespace Unity.ProjectAuditor.Editor.Auditors
                 hasInstancing,
                 isSrpBatcherCompatible.ToString()
             });
+
+            issue.dependencies = AssetsAuditor.GetAssetNode(assetPath);
+
             onIssueFound(issue);
         }
 

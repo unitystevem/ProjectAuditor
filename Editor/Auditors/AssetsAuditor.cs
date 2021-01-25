@@ -19,6 +19,8 @@ namespace Unity.ProjectAuditor.Editor.Auditors
             "Use AssetBundles when possible"
             );
 
+        static Dictionary<string, DependencyNode> m_AssetsDictionary;
+
         readonly List<ProblemDescriptor> m_ProblemDescriptors = new List<ProblemDescriptor>();
 
         public IEnumerable<ProblemDescriptor> GetDescriptors()
@@ -42,23 +44,21 @@ namespace Unity.ProjectAuditor.Editor.Auditors
 
         public void Audit(Action<ProjectIssue> onIssueFound, Action onComplete, IProgressBar progressBar = null)
         {
-            AnalyzeResources(onIssueFound);
+            BuildAssetsDictionary(onIssueFound);
             onComplete();
         }
 
-        static void AnalyzeResources(Action<ProjectIssue> onIssueFound)
+        static void BuildAssetsDictionary(Action<ProjectIssue> onIssueFound)
         {
             var allAssetPaths = AssetDatabase.GetAllAssetPaths();
-            var allResources = allAssetPaths.Where(path => path.IndexOf("/resources/", StringComparison.OrdinalIgnoreCase) >= 0);
-            var allPlayerResources = allResources.Where(path => path.IndexOf("/editor/", StringComparison.OrdinalIgnoreCase) == -1);
-
             var assetPathsDict = new Dictionary<string, DependencyNode>();
-            foreach (var assetPath in allPlayerResources)
+            foreach (var assetPath in allAssetPaths)
             {
                 if ((File.GetAttributes(assetPath) & FileAttributes.Directory) == FileAttributes.Directory)
                     continue;
 
-                var root = AddResourceAsset(assetPath, assetPathsDict, onIssueFound, null);
+                var isResource = assetPath.IndexOf("/resources/", StringComparison.OrdinalIgnoreCase) >= 0 && assetPath.IndexOf("/editor/", StringComparison.OrdinalIgnoreCase) == -1;
+                var root = AnalyzeAssetAndDependencies(assetPath, assetPathsDict, onIssueFound, null, isResource);
                 var dependencies = AssetDatabase.GetDependencies(assetPath, true);
                 foreach (var depAssetPath in dependencies)
                 {
@@ -66,13 +66,15 @@ namespace Unity.ProjectAuditor.Editor.Auditors
                     if (depAssetPath.Equals(assetPath))
                         continue;
 
-                    AddResourceAsset(depAssetPath, assetPathsDict, onIssueFound, root);
+                    AnalyzeAssetAndDependencies(depAssetPath, assetPathsDict, onIssueFound, root, isResource);
                 }
             }
+
+            m_AssetsDictionary = assetPathsDict;
         }
 
-        static DependencyNode AddResourceAsset(
-            string assetPath, Dictionary<string, DependencyNode> assetPathsDict, Action<ProjectIssue> onIssueFound, DependencyNode parent)
+        static DependencyNode AnalyzeAssetAndDependencies(
+            string assetPath, Dictionary<string, DependencyNode> assetPathsDict, Action<ProjectIssue> onIssueFound, DependencyNode parent, bool isResource)
         {
             // skip C# scripts
             if (Path.GetExtension(assetPath).Equals(".cs"))
@@ -94,21 +96,33 @@ namespace Unity.ProjectAuditor.Editor.Auditors
             if (parent != null)
                 dependencyNode.AddChild(parent);
 
-            onIssueFound(new ProjectIssue
-                (
-                    k_Descriptor,
-                    Path.GetFileNameWithoutExtension(location.Path),
-                    IssueCategory.Assets,
-                    location
-                )
-                {
-                    dependencies = dependencyNode
-                }
-            );
+            if (isResource)
+                onIssueFound(new ProjectIssue
+                    (
+                        k_Descriptor,
+                        Path.GetFileNameWithoutExtension(location.Path),
+                        IssueCategory.Assets,
+                        location
+                    )
+                    {
+                        dependencies = dependencyNode
+                    }
+                );
 
             assetPathsDict.Add(assetPath, dependencyNode);
 
             return dependencyNode;
+        }
+
+        public static DependencyNode GetAssetNode(string assetPath)
+        {
+            if (m_AssetsDictionary == null)
+                return null;
+
+            if (!m_AssetsDictionary.ContainsKey(assetPath))
+                return null;
+
+            return m_AssetsDictionary[assetPath];
         }
     }
 }

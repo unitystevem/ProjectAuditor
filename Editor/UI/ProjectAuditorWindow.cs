@@ -70,7 +70,7 @@ namespace Unity.ProjectAuditor.Editor.UI
                 showAreaSelection = false,
                 showAssemblySelection = false,
                 showCritical = false,
-                showDependencyView = false,
+                showDependencyView = true,
                 showRightPanels = false,
                 columnTypes = new[]
                 {

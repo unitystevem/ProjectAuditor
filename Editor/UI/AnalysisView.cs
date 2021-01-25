@@ -60,11 +60,6 @@ namespace Unity.ProjectAuditor.Editor.UI
             get { return m_Desc; }
         }
 
-        public DependencyView dependencyView
-        {
-            get { return m_DependencyView; }
-        }
-
         public IssueTable table
         {
             get { return m_Table; }
@@ -183,7 +178,7 @@ namespace Unity.ProjectAuditor.Editor.UI
                         dependencies = issue.dependencies;
                 }
 
-                dependencyView.SetRoot(dependencies);
+                m_DependencyView.SetRoot(dependencies);
 
                 DrawDependencyView(issue, dependencies);
             }
@@ -274,14 +269,15 @@ namespace Unity.ProjectAuditor.Editor.UI
         {
             EditorGUILayout.BeginVertical(GUI.skin.box, GUILayout.Height(LayoutSize.DependencyViewHeight));
 
-            m_Preferences.dependencies = BoldFoldout(m_Preferences.dependencies, m_Desc.dependencyViewGuiContent);
+            var guiContent = m_Desc.dependencyViewGuiContent != null ? m_Desc.dependencyViewGuiContent : new GUIContent("Dependencies");
+            m_Preferences.dependencies = BoldFoldout(m_Preferences.dependencies, guiContent);
             if (m_Preferences.dependencies)
             {
                 if (root != null)
                 {
                     var r = EditorGUILayout.GetControlRect(GUILayout.ExpandHeight(true));
 
-                    dependencyView.OnGUI(r);
+                    m_DependencyView.OnGUI(r);
                 }
                 else if (issue != null)
                 {
