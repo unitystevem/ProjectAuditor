@@ -61,19 +61,17 @@ namespace Unity.ProjectAuditor.Editor.Utils
 #if UNITY_2019_1_OR_NEWER
             assemblyPaths.AddRange(CompilationPipeline.GetPrecompiledAssemblyPaths(CompilationPipeline.PrecompiledAssemblySources
                 .UserAssembly));
-            assemblyPaths.AddRange(CompilationPipeline.GetPrecompiledAssemblyPaths(CompilationPipeline.PrecompiledAssemblySources
-                .UnityEngine));
 #elif UNITY_2018_4_OR_NEWER
             assemblyPaths.AddRange(CompilationPipeline.GetPrecompiledAssemblyNames()
                 .Select(a => CompilationPipeline.GetPrecompiledAssemblyPathFromAssemblyName(a)));
 #endif
-            return assemblyPaths;
+            return assemblyPaths.Select(path => path.Replace("\\", "/"));
         }
 
         public static IEnumerable<string> GetPrecompiledAssemblyDirectories()
         {
             foreach (var dir in GetPrecompiledAssemblyPaths().Select(path => Path.GetDirectoryName(path)).Distinct())
-                yield return dir;
+                yield return dir.Replace("\\", "/");
         }
 
         public static IEnumerable<string> GetPrecompiledEngineAssemblyPaths()

@@ -12,6 +12,8 @@ namespace UnityEditor.ProjectAuditor.EditorTests
 {
     public class AssemblyHelperTests
     {
+        const string k_CoreModuleAssemblyFilename = "UnityEngine.CoreModule.dll";
+
         TempAsset m_TempAsset;
 
         [OneTimeSetUp]
@@ -49,14 +51,18 @@ namespace UnityEditor.ProjectAuditor.EditorTests
         }
 
         [Test]
-        public void UnityEngineModuleAssemblyPathIsFound()
+        public void CoreModuleIsNotFoundInPrecompiledAssemblies()
+        {
+            var paths = AssemblyHelper.GetPrecompiledAssemblyPaths();
+            var result = paths.FirstOrDefault(path => path.EndsWith(k_CoreModuleAssemblyFilename));
+            Assert.Null(result);
+        }
+
+        [Test]
+        public void CoreModuleIsFoundInPrecompiledEngineAssemblies()
         {
             var paths = AssemblyHelper.GetPrecompiledEngineAssemblyPaths();
-
-            Assert.Positive(paths.Count());
-
-            var expectedPath = EditorApplication.applicationContentsPath + "/Managed/UnityEngine/UnityEngine.CoreModule.dll";
-            var result = paths.FirstOrDefault(path => path.Equals(expectedPath));
+            var result = paths.FirstOrDefault(path => path.EndsWith(k_CoreModuleAssemblyFilename));
             Assert.NotNull(result);
         }
 
