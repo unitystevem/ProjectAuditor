@@ -8,6 +8,7 @@ using Mono.Cecil.Cil;
 using Unity.ProjectAuditor.Editor.CodeAnalysis;
 using Unity.ProjectAuditor.Editor.InstructionAnalyzers;
 using Unity.ProjectAuditor.Editor.Utils;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Profiling;
 using ThreadPriority = System.Threading.ThreadPriority;
@@ -69,7 +70,7 @@ namespace Unity.ProjectAuditor.Editor.Auditors
 
             var assemblyDirectories = new List<string>();
             assemblyDirectories.AddRange(AssemblyHelper.GetPrecompiledAssemblyDirectories());
-            assemblyDirectories.AddRange(AssemblyHelper.GetPrecompiledEngineAssemblyDirectories());
+            assemblyDirectories.AddRange(AssemblyHelper.GetPrecompiledEngineAssemblyDirectories(m_Config.AnalyzeEditorCode, EditorUserBuildSettings.activeBuildTarget));
 
             var onCallFound = new Action<CallInfo>(pair =>
             {

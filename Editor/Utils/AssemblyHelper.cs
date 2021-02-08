@@ -1,10 +1,12 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEditor.Compilation;
+using UnityEditorInternal;
 using UnityEngine;
 
 #if UNITY_2019_3_OR_NEWER
@@ -23,6 +25,8 @@ namespace Unity.ProjectAuditor.Editor.Utils
             get { return Path.GetFileNameWithoutExtension(DefaultAssemblyFileName); }
         }
 
+        static MethodInfo s_GetUnityAssembliesMethod;
+        static FieldInfo s_PrecompiledAssemblyPathField;
         static List<Type> s_Types;
 
         static IEnumerable<Type> GetAllTypes()
@@ -74,36 +78,34 @@ namespace Unity.ProjectAuditor.Editor.Utils
                 yield return dir.Replace("\\", "/");
         }
 
-        public static IEnumerable<string> GetPrecompiledEngineAssemblyPaths()
+        public static IEnumerable<string> GetPrecompiledEngineAssemblyPaths(bool editorCode, BuildTarget buildTarget)
         {
-            var assemblyPaths = new List<string>();
-#if UNITY_2019_1_OR_NEWER
-            assemblyPaths.AddRange(CompilationPipeline.GetPrecompiledAssemblyPaths(CompilationPipeline.PrecompiledAssemblySources
-                .UnityEngine));
-#else
-            assemblyPaths.AddRange(Directory.GetFiles(Path.Combine(EditorApplication.applicationContentsPath,
-                Path.Combine("Managed",
-                    "UnityEngine"))).Where(path => Path.GetExtension(path).Equals(".dll")));
-#endif
+            if (s_GetUnityAssembliesMethod == null)
+            {
+                s_GetUnityAssembliesMethod = typeof(InternalEditorUtility).GetMethod("GetUnityAssembliesInternal", BindingFlags.Static | BindingFlags.NonPublic);
 
-#if !UNITY_2019_2_OR_NEWER
-            var files = Directory.GetFiles(Path.Combine(EditorApplication.applicationContentsPath, Path.Combine(
-                "UnityExtensions",
-                Path.Combine("Unity", "GUISystem"))));
-            assemblyPaths.AddRange(files.Where(path => Path.GetExtension(path).Equals(".dll")));
-#endif
-            return assemblyPaths.Select(path => path.Replace("\\", "/"));
+                var precompiledAssemblyType = Type.GetType("UnityEditor.Scripting.ScriptCompilation.PrecompiledAssembly, UnityEditor.CoreModule");
+                s_PrecompiledAssemblyPathField = precompiledAssemblyType.GetField("Path");
+            }
+
+            var result = s_GetUnityAssembliesMethod.Invoke(null, new object[] { editorCode, buildTarget});
+            var enumerable = result as IEnumerable;
+            foreach (var precompiledAssembly in enumerable)
+            {
+                var path = (string)s_PrecompiledAssemblyPathField.GetValue(precompiledAssembly);
+                yield return path;
+            }
         }
 
-        public static IEnumerable<string> GetPrecompiledEngineAssemblyDirectories()
+        public static IEnumerable<string> GetPrecompiledEngineAssemblyDirectories(bool editorCode, BuildTarget buildTarget)
         {
-            foreach (var dir in GetPrecompiledEngineAssemblyPaths().Select(path => Path.GetDirectoryName(path))
+            foreach (var dir in GetPrecompiledEngineAssemblyPaths(editorCode, buildTarget).Select(path => Path.GetDirectoryName(path))
                      .Distinct()) yield return dir;
         }
 
-        public static bool IsModuleAssembly(string assemblyName)
+        public static bool IsEngineAssembly(string assemblyName)
         {
-            return GetPrecompiledEngineAssemblyPaths().FirstOrDefault(a => a.Contains(assemblyName)) != null;
+            return GetPrecompiledEngineAssemblyPaths(true, EditorUserBuildSettings.activeBuildTarget).FirstOrDefault(a => a.Contains(assemblyName)) != null;
         }
 
         public static bool IsAssemblyReadOnly(string assemblyName)

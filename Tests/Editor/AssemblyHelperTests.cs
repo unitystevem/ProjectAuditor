@@ -61,7 +61,7 @@ namespace UnityEditor.ProjectAuditor.EditorTests
         [Test]
         public void CoreModuleIsFoundInPrecompiledEngineAssemblies()
         {
-            var paths = AssemblyHelper.GetPrecompiledEngineAssemblyPaths();
+            var paths = AssemblyHelper.GetPrecompiledEngineAssemblyPaths(true, EditorUserBuildSettings.activeBuildTarget);
             var result = paths.FirstOrDefault(path => path.EndsWith(k_CoreModuleAssemblyFilename));
             Assert.NotNull(result);
         }
