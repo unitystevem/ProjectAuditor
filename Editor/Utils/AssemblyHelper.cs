@@ -35,27 +35,17 @@ namespace Unity.ProjectAuditor.Editor.Utils
             }
         }
 
-        internal static Type PrecompiledAssemblyType
-        {
-            get
-            {
-                if (s_PrecompiledAssemblyType == null)
-                {
-                    var coreModuleAssembly = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().FullName.StartsWith("UnityEditor.CoreModule"));
-                    if (coreModuleAssembly != null)
-                        s_PrecompiledAssemblyType = coreModuleAssembly.GetType("UnityEditor.Scripting.ScriptCompilation.PrecompiledAssembly");
-                }
-
-                return s_PrecompiledAssemblyType;
-            }
-        }
-
         internal static FieldInfo PrecompiledAssemblyPathField
         {
             get
             {
                 if (s_PrecompiledAssemblyPathField == null)
-                    s_PrecompiledAssemblyPathField = PrecompiledAssemblyType.GetField("Path");
+                {
+                    var typeName = "UnityEditor.Scripting.ScriptCompilation.PrecompiledAssembly";
+                    var precompiledAssemblyType = AllTypes.FirstOrDefault(t => t.FullName.Equals(typeName));
+                    if (precompiledAssemblyType != null)
+                        s_PrecompiledAssemblyPathField = precompiledAssemblyType.GetField("Path");
+                }
 
                 return s_PrecompiledAssemblyPathField;
             }
@@ -88,7 +78,6 @@ namespace Unity.ProjectAuditor.Editor.Utils
         }
 
         static MethodInfo s_GetUnityAssembliesMethod;
-        static Type s_PrecompiledAssemblyType;
         static FieldInfo s_PrecompiledAssemblyPathField;
         static List<Type> s_Types;
 

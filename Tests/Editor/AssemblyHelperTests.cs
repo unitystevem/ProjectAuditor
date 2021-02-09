@@ -33,7 +33,6 @@ namespace UnityEditor.ProjectAuditor.EditorTests
         public void InternalEditorUtilityIsAvailable()
         {
             Assert.NotNull(AssemblyHelper.GetUnityAssembliesMethod);
-            Assert.NotNull(AssemblyHelper.PrecompiledAssemblyType);
             Assert.NotNull(AssemblyHelper.PrecompiledAssemblyPathField);
         }
 
