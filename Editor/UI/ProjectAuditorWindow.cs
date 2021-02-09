@@ -959,7 +959,7 @@ namespace Unity.ProjectAuditor.Editor.UI
 
                 var compiledAssemblies = m_AssemblyNames.Where(a => !AssemblyHelper.IsEngineAssembly(a));
                 compiledAssemblies = compiledAssemblies.Where(a =>
-                    !AssemblyHelper.IsAssemblyReadOnly(a));
+                    !AssemblyHelper.IsReadOnlyAssembly(a));
                 m_AssemblySelection.selection.AddRange(compiledAssemblies);
 
                 if (!m_AssemblySelection.selection.Any())

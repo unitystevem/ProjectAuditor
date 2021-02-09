@@ -30,6 +30,13 @@ namespace UnityEditor.ProjectAuditor.EditorTests
         }
 
         [Test]
+        public void InternalEditorUtilityIsAvailable()
+        {
+            Assert.NotNull(AssemblyHelper.GetUnityAssembliesMethod);
+            Assert.NotNull(AssemblyHelper.PrecompiledAssemblyPathField);
+        }
+
+        [Test]
         public void CanGetBuiltinAuditorTypes()
         {
             var types = AssemblyHelper.GetAllTypesInheritedFromInterface<IAuditor>();
@@ -59,9 +66,17 @@ namespace UnityEditor.ProjectAuditor.EditorTests
         }
 
         [Test]
-        public void CoreModuleIsFoundInPrecompiledEngineAssemblies()
+        public void CoreModuleIsFoundInPrecompiledEditorAssemblies()
         {
             var paths = AssemblyHelper.GetPrecompiledEngineAssemblyPaths(true, EditorUserBuildSettings.activeBuildTarget);
+            var result = paths.FirstOrDefault(path => path.EndsWith(k_CoreModuleAssemblyFilename));
+            Assert.NotNull(result);
+        }
+
+        [Test]
+        public void CoreModuleIsFoundInPrecompiledEngineAssemblies()
+        {
+            var paths = AssemblyHelper.GetPrecompiledEngineAssemblyPaths(false, EditorUserBuildSettings.activeBuildTarget);
             var result = paths.FirstOrDefault(path => path.EndsWith(k_CoreModuleAssemblyFilename));
             Assert.NotNull(result);
         }
@@ -106,7 +121,7 @@ namespace UnityEditor.ProjectAuditor.EditorTests
         [Test]
         public void RegistryPackageAssemblyIsReadOnly()
         {
-            Assert.IsTrue(AssemblyHelper.IsAssemblyReadOnly("UnityEngine.TestRunner"));
+            Assert.IsTrue(AssemblyHelper.IsReadOnlyAssembly("UnityEngine.TestRunner"));
         }
 
 #endif

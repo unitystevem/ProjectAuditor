@@ -25,37 +25,64 @@ namespace Unity.ProjectAuditor.Editor.Utils
             get { return Path.GetFileNameWithoutExtension(DefaultAssemblyFileName); }
         }
 
+        internal static MethodInfo GetUnityAssembliesMethod
+        {
+            get
+            {
+                if (s_GetUnityAssembliesMethod == null)
+                    s_GetUnityAssembliesMethod = typeof(InternalEditorUtility).GetMethod("GetUnityAssembliesInternal", BindingFlags.Static | BindingFlags.NonPublic);
+                return s_GetUnityAssembliesMethod;
+            }
+        }
+
+        internal static FieldInfo PrecompiledAssemblyPathField
+        {
+            get
+            {
+                if (s_PrecompiledAssemblyPathField == null)
+                {
+                    var precompiledAssemblyType = Type.GetType("UnityEditor.Scripting.ScriptCompilation.PrecompiledAssembly, UnityEditor.CoreModule");
+                    s_PrecompiledAssemblyPathField = precompiledAssemblyType.GetField("Path");
+                }
+
+                return s_PrecompiledAssemblyPathField;
+            }
+        }
+
+        internal static List<Type> AllTypes
+        {
+            get
+            {
+                if (s_Types != null)
+                    return s_Types;
+
+                var types = new List<Type>();
+                foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    try
+                    {
+                        types.AddRange(a.GetTypes());
+                    }
+                    catch (ReflectionTypeLoadException /* e */)
+                    {
+                        Debug.LogWarningFormat("Project Auditor: Could not get {0} types information", a.GetName().Name);
+                    }
+                }
+
+                s_Types = types;
+
+                return types;
+            }
+        }
+
         static MethodInfo s_GetUnityAssembliesMethod;
         static FieldInfo s_PrecompiledAssemblyPathField;
         static List<Type> s_Types;
 
-        static IEnumerable<Type> GetAllTypes()
-        {
-            if (s_Types != null)
-                return s_Types;
-
-            var types = new List<Type>();
-            foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                try
-                {
-                    types.AddRange(a.GetTypes());
-                }
-                catch (ReflectionTypeLoadException /* e */)
-                {
-                    Debug.LogWarningFormat("Project Auditor: Could not get {0} types information", a.GetName().Name);
-                }
-            }
-
-            s_Types = types;
-
-            return types;
-        }
-
         public static IEnumerable<Type> GetAllTypesInheritedFromInterface<InterfaceT>()
         {
             var interfaceType = typeof(InterfaceT);
-            return GetAllTypes()
+            return AllTypes
                 .Where(type => type != interfaceType && interfaceType.IsAssignableFrom(type));
         }
 
@@ -80,19 +107,11 @@ namespace Unity.ProjectAuditor.Editor.Utils
 
         public static IEnumerable<string> GetPrecompiledEngineAssemblyPaths(bool editorCode, BuildTarget buildTarget)
         {
-            if (s_GetUnityAssembliesMethod == null)
-            {
-                s_GetUnityAssembliesMethod = typeof(InternalEditorUtility).GetMethod("GetUnityAssembliesInternal", BindingFlags.Static | BindingFlags.NonPublic);
-
-                var precompiledAssemblyType = Type.GetType("UnityEditor.Scripting.ScriptCompilation.PrecompiledAssembly, UnityEditor.CoreModule");
-                s_PrecompiledAssemblyPathField = precompiledAssemblyType.GetField("Path");
-            }
-
-            var result = s_GetUnityAssembliesMethod.Invoke(null, new object[] { editorCode, buildTarget});
+            var result = GetUnityAssembliesMethod.Invoke(null, new object[] { editorCode, buildTarget});
             var enumerable = result as IEnumerable;
             foreach (var precompiledAssembly in enumerable)
             {
-                var path = (string)s_PrecompiledAssemblyPathField.GetValue(precompiledAssembly);
+                var path = (string)PrecompiledAssemblyPathField.GetValue(precompiledAssembly);
                 yield return path;
             }
         }
@@ -108,7 +127,7 @@ namespace Unity.ProjectAuditor.Editor.Utils
             return GetPrecompiledEngineAssemblyPaths(true, EditorUserBuildSettings.activeBuildTarget).FirstOrDefault(a => a.Contains(assemblyName)) != null;
         }
 
-        public static bool IsAssemblyReadOnly(string assemblyName)
+        public static bool IsReadOnlyAssembly(string assemblyName)
         {
             var info = GetAssemblyInfoFromAssemblyName(assemblyName);
             return info.readOnly;
