@@ -97,6 +97,7 @@ namespace Unity.ProjectAuditor.Editor.Utils
                 Status = CompilationStatus.Finished
             });
         }
+
 #if UNITY_2018_2_OR_NEWER
         void CompilePlayerAssemblies(Assembly[] assemblies, IProgressBar progressBar = null)
         {
@@ -142,6 +143,7 @@ namespace Unity.ProjectAuditor.Editor.Utils
             if (progressBar != null)
                 progressBar.ClearProgressBar();
         }
+
 #endif
         public IEnumerable<string> GetCompiledAssemblyDirectories()
         {

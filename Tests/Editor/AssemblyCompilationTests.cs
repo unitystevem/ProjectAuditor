@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using NUnit.Framework;
 using Unity.ProjectAuditor.Editor;
@@ -19,7 +20,7 @@ class MyClass
     void Dummy()
     {
 #if UNITY_EDITOR
-        Debug.Log(Camera.main.name);
+        Debug.Log(Camera.allCameras.Length);
 #endif
     }
 }
@@ -35,9 +36,10 @@ class MyClass
         [Test]
         public void EditorCodeIssueIsNotReported()
         {
-            var projectAuditor = new Unity.ProjectAuditor.Editor.ProjectAuditor();
+            var config = ScriptableObject.CreateInstance<ProjectAuditorConfig>();
+            config.AnalyzeEditorCode = false;
 
-            Assert.False(projectAuditor.config.AnalyzeEditorCode);
+            var projectAuditor = new Unity.ProjectAuditor.Editor.ProjectAuditor(config);
 
             var projectReport = projectAuditor.Audit();
             var issues = projectReport.GetIssues(IssueCategory.Code);

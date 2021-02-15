@@ -14,6 +14,12 @@ using ThreadPriority = System.Threading.ThreadPriority;
 
 namespace Unity.ProjectAuditor.Editor.Auditors
 {
+    public enum CodeProperty
+    {
+        Assembly = 0,
+        Num
+    }
+
     class ScriptAuditor : IAuditor
     {
         readonly List<IInstructionAnalyzer> m_InstructionAnalyzers = new List<IInstructionAnalyzer>();
@@ -36,7 +42,7 @@ namespace Unity.ProjectAuditor.Editor.Auditors
 
         public void Reload(string path)
         {
-            m_ProblemDescriptors = ProblemDescriptorHelper.LoadProblemDescriptors(path, "ApiDatabase");
+            m_ProblemDescriptors = ProblemDescriptorLoader.LoadFromJson(path, "ApiDatabase");
 
             foreach (var type in AssemblyHelper.GetAllTypesInheritedFromInterface<IInstructionAnalyzer>())
                 AddAnalyzer(Activator.CreateInstance(type) as IInstructionAnalyzer);

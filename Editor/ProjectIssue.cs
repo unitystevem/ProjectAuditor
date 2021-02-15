@@ -1,4 +1,5 @@
 using System;
+using Unity.ProjectAuditor.Editor.Auditors;
 using Unity.ProjectAuditor.Editor.CodeAnalysis;
 using Unity.ProjectAuditor.Editor.Utils;
 using UnityEngine;
@@ -33,12 +34,7 @@ namespace Unity.ProjectAuditor.Editor
         /// <summary>
         /// Load times
         /// </summary>
-        LoadTimes,
-
-        /// <summary>
-        /// All areas
-        /// </summary>
-        All
+        LoadTimes
     }
 
     public enum IssueCategory
@@ -119,27 +115,21 @@ namespace Unity.ProjectAuditor.Editor
             }
         }
 
-        public string callingMethod
-        {
-            get
-            {
-                if (dependencies == null)
-                    return string.Empty;
-                if (!dependencies.HasChildren())
-                    return string.Empty;
-
-                var callTree = dependencies.GetChild() as CallTreeNode;
-                if (callTree == null)
-                    return string.Empty;
-                return callTree.name;
-            }
-        }
-
         public bool isPerfCriticalContext
         {
             get
             {
                 return descriptor.critical || (dependencies != null && dependencies.IsPerfCritical());
+            }
+        }
+
+        public Rule.Severity severity
+        {
+            get
+            {
+                if (descriptor.critical || (dependencies != null && dependencies.IsPerfCritical()))
+                    return Rule.Severity.Warning;
+                return descriptor.severity;
             }
         }
 
@@ -152,14 +142,42 @@ namespace Unity.ProjectAuditor.Editor
                 var prettyName = dependencies.prettyName;
                 if (prettyName.Equals(descriptor.description))
                     // if name matches the descriptor's name, use caller's name instead
-                    return string.IsNullOrEmpty(callingMethod) ? string.Empty : dependencies.GetChild().prettyName;
+                    return string.IsNullOrEmpty(this.GetCallingMethod()) ? string.Empty : dependencies.GetChild().prettyName;
                 return prettyName;
             }
+        }
+
+        public int GetNumCustomProperties()
+        {
+            return customProperties != null ? customProperties.Length : 0;
         }
 
         public string GetCustomProperty(int index)
         {
             return customProperties != null ? customProperties[index] : string.Empty;
+        }
+
+        internal bool GetCustomPropertyAsBool(int index)
+        {
+            var valueAsString = GetCustomProperty(index);
+            var value = false;
+            if (!bool.TryParse(valueAsString, out value))
+                return false;
+            return value;
+        }
+
+        internal int GetCustomPropertyAsInt(int index)
+        {
+            var valueAsString = GetCustomProperty(index);
+            var value = 0;
+            if (!int.TryParse(valueAsString, out value))
+                return 0;
+            return value;
+        }
+
+        public void SetCustomProperty(int index, string property)
+        {
+            customProperties[index] = property;
         }
 
         public void SetCustomProperties(string[] properties)
