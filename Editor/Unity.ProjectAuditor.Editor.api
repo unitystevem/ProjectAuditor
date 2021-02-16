@@ -5,7 +5,6 @@ namespace Unity.ProjectAuditor.Editor
 {
     public enum Area
     {
-        public const Unity.ProjectAuditor.Editor.Area All = 5;
         public const Unity.ProjectAuditor.Editor.Area BuildSize = 3;
         public const Unity.ProjectAuditor.Editor.Area CPU = 0;
         public const Unity.ProjectAuditor.Editor.Area GPU = 1;
@@ -81,12 +80,16 @@ namespace Unity.ProjectAuditor.Editor
         public string customevaluator;
         public string description;
         public int id;
+        public string maximumVersion;
         public string method;
+        public string minimumVersion;
         public string problem;
         public Unity.ProjectAuditor.Editor.Rule.Severity severity;
         public string solution;
         public string type;
         public string value;
+        public ProblemDescriptor(int id, string description, string area) {}
+        public ProblemDescriptor(int id, string description, Unity.ProjectAuditor.Editor.Area area) {}
         public ProblemDescriptor(int id, string description, Unity.ProjectAuditor.Editor.Area area, string problem, string solution) {}
         public virtual bool Equals(object obj);
         public virtual bool Equals(Unity.ProjectAuditor.Editor.ProblemDescriptor other);
@@ -131,7 +134,6 @@ namespace Unity.ProjectAuditor.Editor
         public string description;
         public Unity.ProjectAuditor.Editor.ProblemDescriptor descriptor;
         public Unity.ProjectAuditor.Editor.Utils.Location location;
-        public string callingMethod { get; }
         public string filename { get; }
         public bool isPerfCriticalContext { get; }
         public int line { get; }
@@ -257,6 +259,11 @@ namespace Unity.ProjectAuditor.Editor.CodeAnalysis
         public string typeName;
         public virtual string GetPrettyName();
         public virtual bool IsPerfCritical();
+    }
+
+    [System.Runtime.CompilerServices.Extension] public static class CodeIssueExtensions
+    {
+        [System.Runtime.CompilerServices.Extension] public static string GetCallingMethod(Unity.ProjectAuditor.Editor.ProjectIssue issue);
     }
 }
 

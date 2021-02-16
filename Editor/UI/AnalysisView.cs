@@ -35,11 +35,12 @@ namespace Unity.ProjectAuditor.Editor.UI
         public bool showAssemblySelection;
         public bool showCritical;
         public bool showDependencyView;
+        public bool showMuteOptions;
         public bool showRightPanels;
         public GUIContent dependencyViewGuiContent;
         public IssueTable.ColumnType[] columnTypes;
-        public ColumnDescriptor descriptionColumnStyle;
-        public ColumnDescriptor[] customColumnStyles;
+        public ColumnDescriptor descriptionColumnDescriptor;
+        public ColumnDescriptor[] customColumnDescriptors;
         public Action<Location> onDoubleClick;
         public Action<ProblemDescriptor> onOpenDescriptor;
         public ProjectAuditorAnalytics.UIButton analyticsEvent;
@@ -82,15 +83,15 @@ namespace Unity.ProjectAuditor.Editor.UI
                 var columnType = m_Desc.columnTypes[i];
 
                 ColumnDescriptor style;
-                if (columnType == IssueTable.ColumnType.Description && m_Desc.descriptionColumnStyle.Content != null)
+                if (columnType == IssueTable.ColumnType.Description && m_Desc.descriptionColumnDescriptor.Content != null)
                 {
-                    style = m_Desc.descriptionColumnStyle;
+                    style = m_Desc.descriptionColumnDescriptor;
                 }
                 else if (columnType < IssueTable.ColumnType.Custom)
-                    style = Styles.Columns[(int)columnType];
+                    style = k_DefaultColumnDescriptors[(int)columnType];
                 else
                 {
-                    style = m_Desc.customColumnStyles[columnType - IssueTable.ColumnType.Custom];
+                    style = m_Desc.customColumnDescriptors[columnType - IssueTable.ColumnType.Custom];
                 }
 
                 columns[i] = new MultiColumnHeaderState.Column
@@ -139,14 +140,18 @@ namespace Unity.ProjectAuditor.Editor.UI
 
         public void OnGUI()
         {
-            var selectedItems = m_Table.GetSelectedItems();
-            var selectedIssues = selectedItems.Select(i => i.ProjectIssue);
-
-            ProjectIssue issue = null;
-            if (selectedIssues.Count() == 1)
+            if (Styles.TextFieldWarning == null)
             {
-                issue = selectedIssues.First();
+                Styles.TextFieldWarning = new GUIStyle(EditorStyles.textField);
+                Styles.TextFieldWarning.normal.textColor = Color.yellow;
             }
+
+            if (Styles.TextArea == null)
+                Styles.TextArea = new GUIStyle(EditorStyles.textArea);
+
+            var selectedItems = m_Table.GetSelectedItems();
+            var selectedIssues = selectedItems.Where(i => i.ProjectIssue != null).Select(i => i.ProjectIssue);
+            var selectedDescriptors = selectedItems.Select(i => i.ProblemDescriptor).Distinct();
 
             EditorGUILayout.BeginHorizontal();
 
@@ -154,39 +159,39 @@ namespace Unity.ProjectAuditor.Editor.UI
 
             if (m_Desc.showRightPanels)
             {
-                // get selected descriptor, only if they are all the same
-                var problemDescriptor = (ProblemDescriptor)null;
-                var selectedDescriptors = selectedItems.Select(i => i.ProblemDescriptor);
-                if (selectedDescriptors.Select(d => d.id).Distinct().Count() == 1)
-                    problemDescriptor = selectedDescriptors.FirstOrDefault();
-
-                EditorGUILayout.BeginVertical(GUILayout.Width(LayoutSize.FoldoutWidth));
-                DrawFoldouts(problemDescriptor);
-                EditorGUILayout.EndVertical();
+                DrawFoldouts(selectedDescriptors.ToArray());
             }
 
             EditorGUILayout.EndHorizontal();
 
             if (m_Desc.showDependencyView)
             {
-                DependencyNode dependencies = null;
-                if (issue != null && issue.dependencies != null)
-                {
-                    if (issue.dependencies as CallTreeNode != null)
-                        dependencies = issue.dependencies.GetChild(); // skip self
-                    else
-                        dependencies = issue.dependencies;
-                }
-
-                m_DependencyView.SetRoot(dependencies);
-
-                DrawDependencyView(issue, dependencies);
+                DrawDependencyView(selectedIssues.ToArray());
             }
         }
 
         void DrawTable(ProjectIssue[] selectedIssues)
         {
             EditorGUILayout.BeginVertical();
+            EditorGUILayout.Space();
+
+            EditorGUILayout.BeginHorizontal();
+            if (m_Desc.groupByDescription)
+            {
+                if (GUILayout.Button(Contents.CollapseAllButton, EditorStyles.toolbarButton, GUILayout.ExpandWidth(true), GUILayout.Width(100)))
+                    SetRowsExpanded(false);
+                if (GUILayout.Button(Contents.ExpandAllButton, EditorStyles.toolbarButton, GUILayout.ExpandWidth(true), GUILayout.Width(100)))
+                    SetRowsExpanded(true);
+            }
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Zoom", EditorStyles.label, GUILayout.ExpandWidth(false), GUILayout.Width(40));
+            m_Preferences.fontSize = (int)GUILayout.HorizontalSlider(m_Preferences.fontSize, Preferences.k_MinFontSize, Preferences.k_MaxFontSize, GUILayout.ExpandWidth(false), GUILayout.Width(80));
+            m_Table.SetFontSize(m_Preferences.fontSize);
+
+            Styles.TextArea.fontSize = m_Preferences.fontSize;
+
+            EditorGUILayout.EndHorizontal();
 
             var r = EditorGUILayout.GetControlRect(GUILayout.ExpandHeight(true));
 
@@ -194,100 +199,93 @@ namespace Unity.ProjectAuditor.Editor.UI
             m_Table.OnGUI(r);
             Profiler.EndSample();
 
-            if (m_Desc.groupByDescription)
-            {
-                EditorGUILayout.BeginHorizontal();
-                if (GUILayout.Button(Styles.CollapseAllButton, GUILayout.ExpandWidth(true), GUILayout.Width(100)))
-                    SetRowsExpanded(false);
-                if (GUILayout.Button(Styles.ExpandAllButton, GUILayout.ExpandWidth(true), GUILayout.Width(100)))
-                    SetRowsExpanded(true);
-                EditorGUILayout.EndHorizontal();
-            }
-
             var info = selectedIssues.Length + " / " + m_Table.GetNumMatchingIssues() + " Items";
             EditorGUILayout.LabelField(info, GUILayout.ExpandWidth(true), GUILayout.Width(200));
 
             EditorGUILayout.EndVertical();
         }
 
-        bool BoldFoldout(bool toggle, GUIContent content)
+        void DrawFoldouts(ProblemDescriptor[] selectedDescriptors)
         {
-            var foldoutStyle = new GUIStyle(EditorStyles.foldout);
-            foldoutStyle.fontStyle = FontStyle.Bold;
-            return EditorGUILayout.Foldout(toggle, content, foldoutStyle);
+            EditorGUILayout.BeginVertical(GUILayout.Width(LayoutSize.FoldoutWidth));
+
+            DrawDetailsFoldout(selectedDescriptors);
+            DrawRecommendationFoldout(selectedDescriptors);
+
+            EditorGUILayout.EndVertical();
         }
 
-        void DrawFoldouts(ProblemDescriptor problemDescriptor)
-        {
-            DrawDetailsFoldout(problemDescriptor);
-            DrawRecommendationFoldout(problemDescriptor);
-        }
-
-        void DrawDetailsFoldout(ProblemDescriptor problemDescriptor)
+        void DrawDetailsFoldout(ProblemDescriptor[] selectedDescriptors)
         {
             EditorGUILayout.BeginVertical(GUI.skin.box, GUILayout.Width(LayoutSize.FoldoutWidth));
-
-            m_Preferences.details = BoldFoldout(m_Preferences.details, Styles.DetailsFoldout);
+            m_Preferences.details = Utility.BoldFoldout(m_Preferences.details, Contents.DetailsFoldout);
             if (m_Preferences.details)
             {
-                if (problemDescriptor != null)
-                {
-                    EditorStyles.textField.wordWrap = true;
-                    GUILayout.TextArea(problemDescriptor.problem, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
-                }
-                else
-                {
-                    EditorGUILayout.LabelField(k_NoIssueSelectedText);
-                }
+                if (selectedDescriptors.Length == 0)
+                    GUILayout.TextArea(k_NoSelectionText, Styles.TextArea, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
+                else if (selectedDescriptors.Length > 1)
+                    GUILayout.TextArea(k_MultipleSelectionText, Styles.TextArea, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
+                else // if (selectedDescriptors.Length == 1)
+                    GUILayout.TextArea(selectedDescriptors[0].problem, Styles.TextArea, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
             }
-
             EditorGUILayout.EndVertical();
         }
 
-        void DrawRecommendationFoldout(ProblemDescriptor problemDescriptor)
+        void DrawRecommendationFoldout(ProblemDescriptor[] selectedDescriptors)
         {
             EditorGUILayout.BeginVertical(GUI.skin.box, GUILayout.Width(LayoutSize.FoldoutWidth));
-
-            m_Preferences.recommendation = BoldFoldout(m_Preferences.recommendation, Styles.RecommendationFoldout);
+            m_Preferences.recommendation = Utility.BoldFoldout(m_Preferences.recommendation, Contents.RecommendationFoldout);
             if (m_Preferences.recommendation)
             {
-                if (problemDescriptor != null)
-                {
-                    EditorStyles.textField.wordWrap = true;
-                    GUILayout.TextArea(problemDescriptor.solution, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
-                }
-                else
-                {
-                    EditorGUILayout.LabelField(k_NoIssueSelectedText);
-                }
+                if (selectedDescriptors.Length == 0)
+                    GUILayout.TextArea(k_NoSelectionText, Styles.TextArea, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
+                else if (selectedDescriptors.Length > 1)
+                    GUILayout.TextArea(k_MultipleSelectionText, Styles.TextArea, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
+                else // if (selectedDescriptors.Length == 1)
+                    GUILayout.TextArea(selectedDescriptors[0].solution, Styles.TextArea, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
             }
-
             EditorGUILayout.EndVertical();
         }
 
-        void DrawDependencyView(ProjectIssue issue, DependencyNode root)
+        void DrawDependencyView(ProjectIssue[] issues)
         {
             EditorGUILayout.BeginVertical(GUI.skin.box, GUILayout.Height(LayoutSize.DependencyViewHeight));
 
-            var guiContent = m_Desc.dependencyViewGuiContent != null ? m_Desc.dependencyViewGuiContent : new GUIContent("Dependencies");
-            m_Preferences.dependencies = BoldFoldout(m_Preferences.dependencies, guiContent);
+            m_Preferences.dependencies = Utility.BoldFoldout(m_Preferences.dependencies, m_Desc.dependencyViewGuiContent);
             if (m_Preferences.dependencies)
             {
-                if (root != null)
+                if (issues.Length == 0)
                 {
-                    var r = EditorGUILayout.GetControlRect(GUILayout.ExpandHeight(true));
+                    EditorGUILayout.LabelField(k_NoSelectionText, Styles.TextArea, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
+                }
+                else if (issues.Length > 1)
+                {
+                    EditorGUILayout.LabelField(k_MultipleSelectionText, Styles.TextArea, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
+                }
+                else// if (issues.Length == 1)
+                {
+                    var selection = issues[0];
+                    DependencyNode dependencies = null;
+                    if (selection != null && selection.dependencies != null)
+                    {
+                        if (selection.dependencies as CallTreeNode != null)
+                            dependencies = selection.dependencies.GetChild(); // skip self
+                        else
+                            dependencies = selection.dependencies;
+                    }
 
-                    m_DependencyView.OnGUI(r);
-                }
-                else if (issue != null)
-                {
-                    GUIStyle s = new GUIStyle(EditorStyles.textField);
-                    s.normal.textColor = Color.yellow;
-                    EditorGUILayout.LabelField(k_AnalysisIsRequiredText, s, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
-                }
-                else
-                {
-                    EditorGUILayout.LabelField(k_NoIssueSelectedText);
+                    m_DependencyView.SetRoot(dependencies);
+
+                    if (dependencies != null)
+                    {
+                        var r = EditorGUILayout.GetControlRect(GUILayout.ExpandHeight(true));
+
+                        m_DependencyView.OnGUI(r);
+                    }
+                    else
+                    {
+                        EditorGUILayout.LabelField(k_AnalysisIsRequiredText, Styles.TextArea, GUILayout.MaxHeight(LayoutSize.FoldoutMaxHeight));
+                    }
                 }
             }
 
@@ -301,8 +299,9 @@ namespace Unity.ProjectAuditor.Editor.UI
                 m_Table.SetExpanded(row.id, expanded);
         }
 
-        const string k_NoIssueSelectedText = "No item selected";
-        const string k_AnalysisIsRequiredText = "Missing Data: Please Analyze";
+        const string k_NoSelectionText = "<No selection>";
+        const string k_AnalysisIsRequiredText = "<Missing Data: Please Analyze>";
+        const string k_MultipleSelectionText = "<Multiple selection>";
 
         static class LayoutSize
         {
@@ -311,59 +310,65 @@ namespace Unity.ProjectAuditor.Editor.UI
             public static readonly int DependencyViewHeight = 200;
         }
 
-        static class Styles
+        static class Contents
         {
             public static readonly GUIContent ExpandAllButton = new GUIContent("Expand All", "");
             public static readonly GUIContent CollapseAllButton = new GUIContent("Collapse All", "");
             public static readonly GUIContent DetailsFoldout = new GUIContent("Details", "Issue Details");
             public static readonly GUIContent RecommendationFoldout =
                 new GUIContent("Recommendation", "Recommendation on how to solve the issue");
-
-            public static readonly ColumnDescriptor[] Columns =
-            {
-                new ColumnDescriptor
-                {
-                    Content = new GUIContent("Issue", "Issue description"),
-                    Width = 300,
-                    MinWidth = 100,
-                    Format = PropertyFormat.String
-                },
-                new ColumnDescriptor
-                {
-                    Content = new GUIContent(" ! ", "Issue Severity"),
-                    Width = 22,
-                    MinWidth = 22,
-                    Format = PropertyFormat.String
-                },
-                new ColumnDescriptor
-                {
-                    Content = new GUIContent("Area", "The area the issue might have an impact on"),
-                    Width = 60,
-                    MinWidth = 50,
-                    Format = PropertyFormat.String
-                },
-                new ColumnDescriptor
-                {
-                    Content = new GUIContent("Path", "Path and line number"),
-                    Width = 700,
-                    MinWidth = 100,
-                    Format = PropertyFormat.String
-                },
-                new ColumnDescriptor
-                {
-                    Content = new GUIContent("Filename", "Managed Assembly name"),
-                    Width = 180,
-                    MinWidth = 100,
-                    Format = PropertyFormat.String
-                },
-                new ColumnDescriptor
-                {
-                    Content = new GUIContent("File Type", "File extension"),
-                    Width = 80,
-                    MinWidth = 80,
-                    Format = PropertyFormat.String
-                }
-            };
         }
+
+        static class Styles
+        {
+            public static GUIStyle TextArea;
+            public static GUIStyle TextFieldWarning;
+        }
+
+        static readonly ColumnDescriptor[] k_DefaultColumnDescriptors =
+        {
+            new ColumnDescriptor
+            {
+                Content = new GUIContent("Issue", "Issue description"),
+                Width = 300,
+                MinWidth = 100,
+                Format = PropertyFormat.String
+            },
+            new ColumnDescriptor
+            {
+                Content = new GUIContent(" ! ", "Issue Severity"),
+                Width = 22,
+                MinWidth = 22,
+                Format = PropertyFormat.String
+            },
+            new ColumnDescriptor
+            {
+                Content = new GUIContent("Area", "The area the issue might have an impact on"),
+                Width = 60,
+                MinWidth = 50,
+                Format = PropertyFormat.String
+            },
+            new ColumnDescriptor
+            {
+                Content = new GUIContent("Path", "Path and line number"),
+                Width = 700,
+                MinWidth = 100,
+                Format = PropertyFormat.String
+            },
+            new ColumnDescriptor
+            {
+                Content = new GUIContent("Filename", "Managed Assembly name"),
+                Width = 180,
+                MinWidth = 100,
+                Format = PropertyFormat.String
+            },
+            new ColumnDescriptor
+            {
+                Content = new GUIContent("File Type", "File extension"),
+                Width = 80,
+                MinWidth = 80,
+                Format = PropertyFormat.String
+            }
+        };
     }
 }

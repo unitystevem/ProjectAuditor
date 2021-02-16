@@ -61,10 +61,7 @@ namespace Unity.ProjectAuditor.Editor.Auditors
             (
             400000,
             "Parse Error",
-            Area.BuildSize,
-            string.Empty,
-            string.Empty
-            )
+            Area.BuildSize)
         {
             severity = Rule.Severity.Error
         };
@@ -220,9 +217,7 @@ namespace Unity.ProjectAuditor.Editor.Auditors
                 (
                 id++,
                 shaderName,
-                Area.BuildSize,
-                string.Empty,
-                string.Empty
+                Area.BuildSize
                 );
 
             var passCount = k_NotAvailable;
@@ -295,9 +290,7 @@ namespace Unity.ProjectAuditor.Editor.Auditors
                 (
                 id++,
                 shaderName,
-                Area.BuildSize,
-                string.Empty,
-                string.Empty
+                Area.BuildSize
                 );
 
             foreach (var shaderVariantData in shaderVariants)
@@ -362,15 +355,14 @@ namespace Unity.ProjectAuditor.Editor.Auditors
             var lines = GetCompiledShaderLines(logFile);
             foreach (var line in lines)
             {
-                var strippedLine = line.Substring("Compiled shader: ".Length);
-                var parts = strippedLine.Split(',');
+                var parts = line.Split(',');
                 var shaderName = parts[0];
                 var pass = parts[1].Trim(' ').Substring("pass: ".Length);
                 var stage = parts[2].Trim(' ').Substring("stage: ".Length);
                 var keywordsString = parts[3].Trim(' ').Substring("keywords ".Length); // note that the log is missing ':'
                 var keywords = StringToKeywords(keywordsString);
 
-                if (!stage.Equals("fragment") && !stage.Equals("pixel"))
+                if (!stage.Equals("fragment") && !stage.Equals("pixel") && !stage.Equals("all"))
                     continue;
 
                 if (!compiledVariants.ContainsKey(shaderName))
@@ -430,8 +422,10 @@ namespace Unity.ProjectAuditor.Editor.Auditors
                 string line;
                 while ((line = file.ReadLine()) != null)
                 {
-                    if (line.StartsWith("Compiled shader:"))
-                        compilationLines.Add(line);
+                    const string prefix = "Compiled shader: ";
+                    var compilationLogIndex = line.IndexOf(prefix);
+                    if (compilationLogIndex >= 0)
+                        compilationLines.Add(line.Substring(compilationLogIndex + prefix.Length));
                 }
             }
             return compilationLines.ToArray();

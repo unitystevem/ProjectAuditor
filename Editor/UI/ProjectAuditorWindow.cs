@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.ProjectAuditor.Editor.Auditors;
+using Unity.ProjectAuditor.Editor.CodeAnalysis;
 using Unity.ProjectAuditor.Editor.Utils;
 using UnityEditor;
 using UnityEditor.Callbacks;
@@ -43,6 +44,7 @@ namespace Unity.ProjectAuditor.Editor.UI
                 showAssemblySelection = false,
                 showCritical = false,
                 showDependencyView = true,
+                showMuteOptions = false,
                 showRightPanels = true,
                 dependencyViewGuiContent = new GUIContent("Asset Dependencies"),
                 columnTypes = new[]
@@ -51,7 +53,7 @@ namespace Unity.ProjectAuditor.Editor.UI
                     IssueTable.ColumnType.FileType,
                     IssueTable.ColumnType.Path
                 },
-                descriptionColumnStyle = new ColumnDescriptor
+                descriptionColumnDescriptor = new ColumnDescriptor
                 {
                     Content = new GUIContent("Asset Name"),
                     Width = 300,
@@ -70,8 +72,10 @@ namespace Unity.ProjectAuditor.Editor.UI
                 showAreaSelection = false,
                 showAssemblySelection = false,
                 showCritical = false,
+                showMuteOptions = false,
                 showDependencyView = true,
                 showRightPanels = false,
+                dependencyViewGuiContent = new GUIContent("Asset Dependencies"),
                 columnTypes = new[]
                 {
                     IssueTable.ColumnType.Severity,
@@ -83,14 +87,14 @@ namespace Unity.ProjectAuditor.Editor.UI
                     IssueTable.ColumnType.Custom + 4,
                     IssueTable.ColumnType.Custom + 5
                 },
-                descriptionColumnStyle = new ColumnDescriptor
+                descriptionColumnDescriptor = new ColumnDescriptor
                 {
                     Content = new GUIContent("Shader Name"),
                     Width = 300,
                     MinWidth = 100,
                     Format = PropertyFormat.String
                 },
-                customColumnStyles = new[]
+                customColumnDescriptors = new[]
                 {
                     new ColumnDescriptor
                     {
@@ -148,6 +152,7 @@ namespace Unity.ProjectAuditor.Editor.UI
                 showAssemblySelection = true,
                 showCritical = true,
                 showDependencyView = true,
+                showMuteOptions = true,
                 showRightPanels = true,
                 dependencyViewGuiContent = new GUIContent("Inverted Call Hierarchy"),
                 columnTypes = new[]
@@ -158,7 +163,7 @@ namespace Unity.ProjectAuditor.Editor.UI
                     IssueTable.ColumnType.Filename,
                     IssueTable.ColumnType.Custom
                 },
-                customColumnStyles = new[]
+                customColumnDescriptors = new[]
                 {
                     new ColumnDescriptor
                     {
@@ -181,6 +186,7 @@ namespace Unity.ProjectAuditor.Editor.UI
                 showAreaSelection = true,
                 showAssemblySelection = false,
                 showCritical = false,
+                showMuteOptions = true,
                 showDependencyView = false,
                 showRightPanels = true,
                 columnTypes = new[]
@@ -202,6 +208,7 @@ namespace Unity.ProjectAuditor.Editor.UI
             showAssemblySelection = false,
             showCritical = false,
             showDependencyView = false,
+            showMuteOptions = false,
             showRightPanels = false,
             columnTypes = new[]
             {
@@ -212,14 +219,14 @@ namespace Unity.ProjectAuditor.Editor.UI
                 IssueTable.ColumnType.Custom + 3,
                 IssueTable.ColumnType.Custom + 4
             },
-            descriptionColumnStyle = new ColumnDescriptor
+            descriptionColumnDescriptor = new ColumnDescriptor
             {
                 Content = new GUIContent("Shader Name"),
                 Width = 300,
                 MinWidth = 100,
                 Format = PropertyFormat.String
             },
-            customColumnStyles = new[]
+            customColumnDescriptors = new[]
             {
                 new ColumnDescriptor
                 {
@@ -319,10 +326,10 @@ namespace Unity.ProjectAuditor.Editor.UI
             if (!matchArea)
                 return false;
 
-            if (!m_Preferences.mutedIssues)
+            if (!m_Preferences.mutedIssues && activeAnalysisView.desc.showMuteOptions)
             {
                 Profiler.BeginSample("IsMuted");
-                var muted = m_ProjectAuditor.config.GetAction(issue.descriptor, issue.callingMethod) ==
+                var muted = m_ProjectAuditor.config.GetAction(issue.descriptor, issue.GetCallingMethod()) ==
                     Rule.Severity.None;
                 Profiler.EndSample();
                 if (muted)
@@ -576,30 +583,6 @@ namespace Unity.ProjectAuditor.Editor.UI
             OnEnable();
         }
 
-        static bool ButtonWithDropdownList(GUIContent content, string[] buttonNames, GenericMenu.MenuFunction2 callback, params GUILayoutOption[] options)
-        {
-            var style = GUI.skin.FindStyle("DropDownButton");
-            var rect = GUILayoutUtility.GetRect(content, style, options);
-
-            var dropDownRect = rect;
-            const float kDropDownButtonWidth = 20f;
-            dropDownRect.xMin = dropDownRect.xMax - kDropDownButtonWidth;
-
-            if (Event.current.type == EventType.MouseDown && dropDownRect.Contains(Event.current.mousePosition))
-            {
-                var menu = new GenericMenu();
-                for (int i = 0; i != buttonNames.Length; i++)
-                    menu.AddItem(new GUIContent(buttonNames[i]), false, callback, i);
-
-                menu.DropDown(rect);
-                Event.current.Use();
-
-                return false;
-            }
-
-            return GUI.Button(rect, content, style);
-        }
-
         void ExportDropDownCallback(object data)
         {
             var mode = (ExportMode)data;
@@ -630,7 +613,7 @@ namespace Unity.ProjectAuditor.Editor.UI
                     "csv");
                 if (path.Length != 0)
                 {
-                    m_ProjectReport.ExportToCSV(path, issue => m_ProjectAuditor.config.GetAction(issue.descriptor, issue.callingMethod) !=
+                    m_ProjectReport.ExportToCSV(path, issue => m_ProjectAuditor.config.GetAction(issue.descriptor, issue.GetCallingMethod()) !=
                         Rule.Severity.None && (match == null || match(issue)));
                 }
             }
@@ -640,13 +623,6 @@ namespace Unity.ProjectAuditor.Editor.UI
         void DrawAnalysis()
         {
             activeAnalysisView.OnGUI();
-        }
-
-        bool BoldFoldout(bool toggle, GUIContent content)
-        {
-            var foldoutStyle = new GUIStyle(EditorStyles.foldout);
-            foldoutStyle.fontStyle = FontStyle.Bold;
-            return EditorGUILayout.Foldout(toggle, content, foldoutStyle);
         }
 
         string GetSelectedAssembliesSummary()
@@ -803,7 +779,7 @@ namespace Unity.ProjectAuditor.Editor.UI
         {
             EditorGUILayout.BeginVertical(GUI.skin.box, GUILayout.ExpandWidth(true));
 
-            m_Preferences.filters = BoldFoldout(m_Preferences.filters, Styles.FiltersFoldout);
+            m_Preferences.filters = Utility.BoldFoldout(m_Preferences.filters, Styles.FiltersFoldout);
             if (m_Preferences.filters)
             {
                 EditorGUI.indentLevel++;
@@ -851,6 +827,7 @@ namespace Unity.ProjectAuditor.Editor.UI
                         analytic);
                 }
 
+                GUI.enabled = activeAnalysisView.desc.showMuteOptions;
                 bool wasDisplayingMuted = m_Preferences.mutedIssues;
                 m_Preferences.mutedIssues = EditorGUILayout.ToggleLeft("Muted Issues",
                     m_Preferences.mutedIssues, GUILayout.Width(127));
@@ -863,6 +840,8 @@ namespace Unity.ProjectAuditor.Editor.UI
                     ProjectAuditorAnalytics.SendUIButtonEventWithKeyValues(ProjectAuditorAnalytics.UIButton.ShowMuted,
                         analytic, payload);
                 }
+
+                GUI.enabled = true;
 
                 EditorGUILayout.EndHorizontal();
 
@@ -879,12 +858,48 @@ namespace Unity.ProjectAuditor.Editor.UI
 
             EditorGUILayout.BeginVertical(GUI.skin.box, GUILayout.ExpandWidth(true));
 
-            m_Preferences.actions = BoldFoldout(m_Preferences.actions, Styles.ActionsFoldout);
+            m_Preferences.actions = Utility.BoldFoldout(m_Preferences.actions, Styles.ActionsFoldout);
             if (m_Preferences.actions)
             {
                 EditorGUI.indentLevel++;
 
                 EditorGUILayout.BeginHorizontal();
+
+                GUI.enabled = activeAnalysisView.desc.showMuteOptions;
+                EditorGUILayout.LabelField("Selected :", GUILayout.ExpandWidth(true), GUILayout.Width(80));
+
+                if (GUILayout.Button(Styles.MuteButton, GUILayout.ExpandWidth(true), GUILayout.Width(100)))
+                {
+                    var analytic = ProjectAuditorAnalytics.BeginAnalytic();
+                    var selectedItems = table.GetSelectedItems();
+                    foreach (var item in selectedItems)
+                    {
+                        SetRuleForItem(item, Rule.Severity.None);
+                    }
+
+                    if (!m_Preferences.mutedIssues)
+                    {
+                        table.SetSelection(new List<int>());
+                    }
+
+                    ProjectAuditorAnalytics.SendUIButtonEventWithSelectionSummary(ProjectAuditorAnalytics.UIButton.Mute,
+                        analytic, table.GetSelectedItems());
+                }
+
+                if (GUILayout.Button(Styles.UnmuteButton, GUILayout.ExpandWidth(true), GUILayout.Width(100)))
+                {
+                    var analytic = ProjectAuditorAnalytics.BeginAnalytic();
+                    var selectedItems = table.GetSelectedItems();
+                    foreach (var item in selectedItems)
+                    {
+                        ClearRulesForItem(item);
+                    }
+
+                    ProjectAuditorAnalytics.SendUIButtonEventWithSelectionSummary(
+                        ProjectAuditorAnalytics.UIButton.Unmute, analytic, table.GetSelectedItems());
+                }
+
+                GUI.enabled = true;
 
                 if (activeAnalysisView.desc.category == IssueCategory.Shaders)
                 {
@@ -906,41 +921,6 @@ namespace Unity.ProjectAuditor.Editor.UI
                         m_ShaderVariantsWindow.AddIssues(m_ProjectReport.GetIssues(IssueCategory.ShaderVariants));
                         m_ShaderVariantsWindow.Refresh();
                         m_ShaderVariantsWindow.Show();
-                    }
-                }
-                else
-                {
-                    EditorGUILayout.LabelField("Selected :", GUILayout.ExpandWidth(true), GUILayout.Width(80));
-
-                    if (GUILayout.Button(Styles.MuteButton, GUILayout.ExpandWidth(true), GUILayout.Width(100)))
-                    {
-                        var analytic = ProjectAuditorAnalytics.BeginAnalytic();
-                        var selectedItems = table.GetSelectedItems();
-                        foreach (var item in selectedItems)
-                        {
-                            SetRuleForItem(item, Rule.Severity.None);
-                        }
-
-                        if (!m_Preferences.mutedIssues)
-                        {
-                            table.SetSelection(new List<int>());
-                        }
-
-                        ProjectAuditorAnalytics.SendUIButtonEventWithSelectionSummary(ProjectAuditorAnalytics.UIButton.Mute,
-                            analytic, table.GetSelectedItems());
-                    }
-
-                    if (GUILayout.Button(Styles.UnmuteButton, GUILayout.ExpandWidth(true), GUILayout.Width(100)))
-                    {
-                        var analytic = ProjectAuditorAnalytics.BeginAnalytic();
-                        var selectedItems = table.GetSelectedItems();
-                        foreach (var item in selectedItems)
-                        {
-                            ClearRulesForItem(item);
-                        }
-
-                        ProjectAuditorAnalytics.SendUIButtonEventWithSelectionSummary(
-                            ProjectAuditorAnalytics.UIButton.Unmute, analytic, table.GetSelectedItems());
                     }
                 }
 
@@ -1024,7 +1004,7 @@ namespace Unity.ProjectAuditor.Editor.UI
             }
             else
             {
-                callingMethod = item.ProjectIssue.callingMethod;
+                callingMethod = item.ProjectIssue.GetCallingMethod();
                 rule = m_ProjectAuditor.config.GetRule(descriptor, callingMethod);
             }
 
@@ -1042,7 +1022,7 @@ namespace Unity.ProjectAuditor.Editor.UI
         void ClearRulesForItem(IssueTableItem item)
         {
             m_ProjectAuditor.config.ClearRules(item.ProblemDescriptor,
-                item.hasChildren ? string.Empty : item.ProjectIssue.callingMethod);
+                item.hasChildren ? string.Empty : item.ProjectIssue.GetCallingMethod());
         }
 
         void DrawToolbar()
@@ -1058,7 +1038,7 @@ namespace Unity.ProjectAuditor.Editor.UI
 
                 GUI.enabled = m_AnalysisState == AnalysisState.Valid;
 
-                if (ButtonWithDropdownList(Styles.ExportButton, Styles.ExportModeStrings,
+                if (Utility.ButtonWithDropdownList(Styles.ExportButton, Styles.ExportModeStrings,
                     ExportDropDownCallback, GUILayout.ExpandWidth(true), GUILayout.Width(80)))
                 {
                     Export();

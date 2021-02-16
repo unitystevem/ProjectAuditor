@@ -3,6 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 using Unity.ProjectAuditor.Editor;
 using Unity.ProjectAuditor.Editor.Auditors;
+using Unity.ProjectAuditor.Editor.CodeAnalysis;
 using Unity.ProjectAuditor.Editor.Utils;
 
 namespace UnityEditor.ProjectAuditor.EditorTests
@@ -10,6 +11,7 @@ namespace UnityEditor.ProjectAuditor.EditorTests
     class ScriptIssueTests
     {
         TempAsset m_TempAsset;
+        TempAsset m_TempAssetDerivedClassMethod;
         TempAsset m_TempAssetInPlugin;
         TempAsset m_TempAssetInEditorCode;
         TempAsset m_TempAssetInPlayerCode;
@@ -20,6 +22,7 @@ namespace UnityEditor.ProjectAuditor.EditorTests
         TempAsset m_TempAssetIssueInNestedClass;
         TempAsset m_TempAssetIssueInOverrideMethod;
         TempAsset m_TempAssetIssueInVirtualMethod;
+        TempAsset m_TempAssetAnyApiInNamespace;
 
         [OneTimeSetUp]
         public void SetUp()
@@ -30,8 +33,18 @@ class MyClass
 {
     void Dummy()
     {
-        // Accessing Camera.main property is not recommended and will be reported as a possible performance problem.
-        Debug.Log(Camera.main.name);
+        Debug.Log(Camera.allCameras.Length.ToString());
+    }
+}
+");
+
+            m_TempAssetDerivedClassMethod = new TempAsset("DerivedClassMethod.cs", @"
+using UnityEngine;
+class DerivedClassMethod
+{
+    bool IsMainCamera(Camera camera)
+    {
+        return camera.tag == ""MainCamera"";
     }
 }
 ");
@@ -42,8 +55,7 @@ class MyPlugin
 {
     void Dummy()
     {
-        // Accessing Camera.main property is not recommended and will be reported as a possible performance problem.
-        Debug.Log(Camera.main.name);
+        Debug.Log(Camera.allCameras.Length.ToString());
     }
 }
 ");
@@ -55,7 +67,7 @@ class MyClassWithPlayerOnlyCode
     void Dummy()
     {
 #if !UNITY_EDITOR
-        Debug.Log(Camera.main.name);
+        Debug.Log(Camera.allCameras.Length.ToString());
 #endif
     }
 }
@@ -68,7 +80,7 @@ class MyClassWithEditorOnlyCode
     void Dummy()
     {
 #if UNITY_EDITOR
-        Debug.Log(Camera.main.name);
+        Debug.Log(Camera.allCameras.Length.ToString());
 #endif
     }
 }
@@ -82,7 +94,7 @@ class MyClassWithNested
     {
         void Dummy()
         {
-            Debug.Log(Camera.main.name);
+            Debug.Log(Camera.allCameras.Length.ToString());
         }
     }
 }
@@ -94,7 +106,7 @@ class GenericClass<T>
 {
     void Dummy()
     {
-        Debug.Log(Camera.main.name);
+        Debug.Log(Camera.allCameras.Length.ToString());
     }
 }
 ");
@@ -105,7 +117,7 @@ abstract class AbstractClass
 {
     public virtual void Dummy()
     {
-        Debug.Log(Camera.main.name);
+        Debug.Log(Camera.allCameras.Length.ToString());
     }
 }
 ");
@@ -122,7 +134,7 @@ class DerivedClass : BaseClass
 {
     public override void Dummy()
     {
-        Debug.Log(Camera.main.name);
+        Debug.Log(Camera.allCameras.Length.ToString());
     }
 }
 ");
@@ -133,7 +145,7 @@ class MyMonoBehaviour : MonoBehaviour
 {
     void Start()
     {
-        Debug.Log(Camera.main.name);
+        Debug.Log(Camera.allCameras.Length.ToString());
     }
 }
 ");
@@ -166,9 +178,21 @@ class ClassWithDelegate
     {
         myFunc = () =>
         {
-            Debug.Log(Camera.main.name);
+            Debug.Log(Camera.allCameras.Length.ToString());
             return 0;
         };
+    }
+}
+");
+
+            m_TempAssetAnyApiInNamespace = new TempAsset("AnyApiInNamespace.cs", @"
+using System.Linq;
+using System.Collections.Generic;
+class AnyApiInNamespace
+{
+    int SumAllValues(List<int> list)
+    {
+        return list.Sum();
     }
 }
 ");
@@ -193,20 +217,34 @@ class ClassWithDelegate
             Assert.NotNull(myIssue.descriptor);
 
             Assert.AreEqual(Rule.Severity.Default, myIssue.descriptor.severity);
-            Assert.AreEqual(101000, myIssue.descriptor.id);
+            Assert.AreEqual(101066, myIssue.descriptor.id);
             Assert.True(myIssue.descriptor.type.Equals("UnityEngine.Camera"));
-            Assert.True(myIssue.descriptor.method.Equals("main"));
+            Assert.True(myIssue.descriptor.method.Equals("allCameras"));
 
-            Assert.True(myIssue.name.Equals("Camera.get_main"));
+            Assert.True(myIssue.name.Equals("Camera.get_allCameras"));
             Assert.True(myIssue.filename.Equals(m_TempAsset.scriptName));
-            Assert.True(myIssue.description.Equals("UnityEngine.Camera.main"));
-            Assert.True(myIssue.callingMethod.Equals("System.Void MyClass::Dummy()"));
-            Assert.AreEqual(8, myIssue.line);
+            Assert.True(myIssue.description.Equals("UnityEngine.Camera.allCameras"));
+            Assert.True(myIssue.GetCallingMethod().Equals("System.Void MyClass::Dummy()"));
+            Assert.AreEqual(7, myIssue.line);
             Assert.AreEqual(IssueCategory.Code, myIssue.category);
 
             // check custom property
             Assert.AreEqual((int)CodeProperty.Num, myIssue.GetNumCustomProperties());
             Assert.True(myIssue.GetCustomProperty((int)CodeProperty.Assembly).Equals(AssemblyHelper.DefaultAssemblyName));
+        }
+
+        [Test]
+        public void DerivedClassMethodIssueIsFound()
+        {
+            var filteredIssues = ScriptIssueTestHelper.AnalyzeAndFindScriptIssues(m_TempAssetDerivedClassMethod);
+
+            Assert.AreEqual(1, filteredIssues.Count());
+
+            var myIssue = filteredIssues.FirstOrDefault();
+
+            Assert.NotNull(myIssue);
+            Assert.NotNull(myIssue.descriptor);
+            Assert.True(myIssue.description.Equals("UnityEngine.Component.tag"));
         }
 
         [Test]
@@ -216,7 +254,7 @@ class ClassWithDelegate
 
             Assert.AreEqual(1, issues.Count());
 
-            Assert.True(issues.First().callingMethod.Equals("System.Void MyPlugin::Dummy()"));
+            Assert.True(issues.First().GetCallingMethod().Equals("System.Void MyPlugin::Dummy()"));
         }
 
         [Test]
@@ -226,7 +264,7 @@ class ClassWithDelegate
 
             Assert.AreEqual(1, issues.Count());
 
-            Assert.True(issues.First().callingMethod.Equals("System.Void MyClassWithPlayerOnlyCode::Dummy()"));
+            Assert.True(issues.First().GetCallingMethod().Equals("System.Void MyClassWithPlayerOnlyCode::Dummy()"));
         }
 
         [Test]
@@ -244,7 +282,7 @@ class ClassWithDelegate
 
             Assert.AreEqual(1, issues.Count());
 
-            Assert.True(issues.First().callingMethod.Equals("System.Void MyClassWithNested/NestedClass::Dummy()"));
+            Assert.True(issues.First().GetCallingMethod().Equals("System.Void MyClassWithNested/NestedClass::Dummy()"));
         }
 
         [Test]
@@ -254,7 +292,7 @@ class ClassWithDelegate
 
             Assert.AreEqual(1, issues.Count());
 
-            Assert.True(issues.First().callingMethod.Equals("System.Void GenericClass`1::Dummy()"));
+            Assert.True(issues.First().GetCallingMethod().Equals("System.Void GenericClass`1::Dummy()"));
         }
 
         [Test]
@@ -264,7 +302,7 @@ class ClassWithDelegate
 
             Assert.AreEqual(1, issues.Count());
 
-            Assert.True(issues.First().callingMethod.Equals("System.Void AbstractClass::Dummy()"));
+            Assert.True(issues.First().GetCallingMethod().Equals("System.Void AbstractClass::Dummy()"));
         }
 
         [Test]
@@ -274,7 +312,7 @@ class ClassWithDelegate
 
             Assert.AreEqual(1, issues.Count());
 
-            Assert.True(issues.First().callingMethod.Equals("System.Void DerivedClass::Dummy()"));
+            Assert.True(issues.First().GetCallingMethod().Equals("System.Void DerivedClass::Dummy()"));
         }
 
         [Test]
@@ -284,7 +322,7 @@ class ClassWithDelegate
 
             Assert.AreEqual(1, issues.Count());
 
-            Assert.True(issues.First().callingMethod.Equals("System.Void MyMonoBehaviour::Start()"));
+            Assert.True(issues.First().GetCallingMethod().Equals("System.Void MyMonoBehaviour::Start()"));
         }
 
         [Test]
@@ -294,7 +332,7 @@ class ClassWithDelegate
 
             Assert.AreEqual(1, issues.Count());
 
-            Assert.True(issues.First().callingMethod
+            Assert.True(issues.First().GetCallingMethod()
                 .Equals("System.Boolean MyMonoBehaviourWithCoroutine/<MyCoroutine>d__1::MoveNext()"));
         }
 
@@ -302,10 +340,20 @@ class ClassWithDelegate
         public void IssueInDelegateIsFound()
         {
             var allScriptIssues = ScriptIssueTestHelper.AnalyzeAndFindScriptIssues(m_TempAssetIssueInDelegate);
-            var issue = allScriptIssues.FirstOrDefault(i => i.name.Equals("Camera.get_main"));
+            var issue = allScriptIssues.FirstOrDefault(i => i.name.Equals("Camera.get_allCameras"));
             Assert.NotNull(issue);
 
-            Assert.True(issue.callingMethod.Equals("System.Int32 ClassWithDelegate/<>c::<Dummy>b__1_0()"));
+            Assert.True(issue.GetCallingMethod().Equals("System.Int32 ClassWithDelegate/<>c::<Dummy>b__1_0()"));
+        }
+
+        [Test]
+        public void IssueInNamespaceIsFound()
+        {
+            var allScriptIssues = ScriptIssueTestHelper.AnalyzeAndFindScriptIssues(m_TempAssetAnyApiInNamespace);
+            var issue = allScriptIssues.FirstOrDefault(i => i.description.Equals("Enumerable.Sum"));
+            Assert.NotNull(issue);
+
+            Assert.True(issue.descriptor.description.Equals("System.Linq.*"));
         }
     }
 }
